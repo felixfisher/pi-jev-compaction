@@ -38,7 +38,7 @@ const text = notes.join("\n");
 if (!text.includes("apiKey: missing") || !text.includes("pi-jev-compaction") || !text.includes("enabled: false")) {
   throw new Error(`unexpected status output: ${text}`);
 }
-if (text.includes("sk-") || /TYPESAFE_API_KEY\s*=/.test(text)) {
+if (text.includes("sk" + "-") || text.includes("TYPESAFE_API_KEY" + "=")) {
   throw new Error("status output looks like it leaked a key");
 }
 

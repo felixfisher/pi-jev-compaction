@@ -185,6 +185,36 @@ export interface CompactWindowInput {
   extensionVersion?: string;
 }
 
+export function estimateReplayTokens(messages: AgentMessage[]): number {
+  return messages.reduce((sum, message) => sum + estimateTokens(message), 0);
+}
+
+export function estimateMinimumReplayTokens(messages: AgentMessage[], config: JevCompactionConfig): number {
+  const pairing = pairToolCalls(messages);
+  const decisions: ToolDecision[] = [];
+  for (const pair of pairing.pairs) {
+    const protectedReason = protectedReasonForPair(pair, messages, config);
+    if (protectedReason) {
+      decisions.push({
+        toolCallId: pair.toolCallId,
+        toolName: pair.toolName,
+        action: "protected",
+        protectedReason,
+      });
+    } else {
+      decisions.push({
+        toolCallId: pair.toolCallId,
+        toolName: pair.toolName,
+        action: "drop_call",
+      });
+    }
+  }
+  const replay = applyDecisions(messages, decisions, (result, toolName) =>
+    truncateResultContent(result, toolName, config),
+  );
+  return estimateReplayTokens(replay);
+}
+
 export async function compactWindow(input: CompactWindowInput): Promise<CompactOutcome> {
   const started = (input.now ?? Date.now)();
   const cloned = tryClone(input.messages);
@@ -207,6 +237,11 @@ export async function compactWindow(input: CompactWindowInput): Promise<CompactO
     } else {
       judgeable.push(pair);
     }
+  }
+
+  const minimumReplayTokens = estimateMinimumReplayTokens(messages, input.config);
+  if (minimumReplayTokens > input.config.maxReplayTokens) {
+    return { ok: false, reason: "max_replay_tokens" };
   }
 
   let model = input.config.model;
@@ -257,7 +292,7 @@ export async function compactWindow(input: CompactWindowInput): Promise<CompactO
   if (reductionRatio + 1e-9 < input.config.minReductionRatio) {
     return { ok: false, reason: "min_reduction_ratio" };
   }
-  const replayTokens = replayMessages.reduce((sum, message) => sum + estimateTokens(message), 0);
+  const replayTokens = estimateReplayTokens(replayMessages);
   if (replayTokens > input.config.maxReplayTokens) {
     return { ok: false, reason: "max_replay_tokens" };
   }

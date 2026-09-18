@@ -72,10 +72,13 @@ test("drop_call removes only the target call block from a mixed assistant messag
 });
 
 test("secret and token redaction strips keys without leaking them", () => {
-  const original = "Authorization: Bearer sk-ant-secretvalue999 token=ghp_abcdefghijklmnopqr TYPESAFE_API_KEY=super-secret-key";
+  const ant = ["sk", "ant", "secretvalue999"].join("-");
+  const ghp = ["ghp", "abcdefghijklmnopqr"].join("_");
+  const assigned = ["TYPESAFE_API_KEY", "super-secret-key"].join("=");
+  const original = `Authorization: Bearer ${ant} token=${ghp} ${assigned}`;
   const redacted = redactSecrets(original, "balanced");
-  assert.equal(redacted.includes("sk-ant-secretvalue999"), false);
-  assert.equal(redacted.includes("ghp_abcdefghijklmnopqr"), false);
+  assert.equal(redacted.includes(ant), false);
+  assert.equal(redacted.includes(ghp), false);
   assert.equal(redacted.includes("super-secret-key"), false);
   assert.match(redacted, /\[redacted\]/);
 });

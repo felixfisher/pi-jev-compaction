@@ -4,8 +4,9 @@
 
 **实验性** Pi 扩展：用 TypeSafe Jev 对旧工具调用做逐项判断，生成可审计、跨模型的精简回放。用户文本和助手正文默认逐字保留.
 
-> New installs are **disabled** (`enabled: false`). The extension does not call TypeSafe until you opt in.  
-> 新安装默认 **关闭**。未显式启用前不会向 TypeSafe 发请求。
+> New installs are **disabled** (`enabled: false`). `enabled` only gates **new** TypeSafe API requests.  
+> Stored `pi-jev-compaction` details can still be replayed locally when disabled.  
+> 新安装默认 **关闭**。`enabled` 只控制是否发起新的 TypeSafe 请求；已写入的 details 仍可本地重放。
 
 Inspired by [`tamaratran/fast-jev-compaction`](https://github.com/tamaratran/fast-jev-compaction). This package is a Pi adapter with its own pairing, persistence, and replay layer; it does not copy that repository's source.
 
@@ -43,15 +44,15 @@ Project override: `<cwd>/.pi/jev-compaction.json`, only when the project is trus
 
 ### Privacy / data flow
 
-When disabled, no TypeSafe request is made.
+`enabled: false` (default) does not call TypeSafe. Matching local compaction details are still replayed.
 
-When enabled, Jev receives redacted state: tool names, truncated arguments, result length, error flags, short tags, and short user/assistant snippets. Full tool results are not sent. Secrets/tokens are masked first.
+When enabled, a Jev request sends: secret-redacted, truncated **short user/assistant text snippets**; tool names; redacted/truncated argument summaries; result lengths, error flags, and short tags. It does **not** send full toolResult bodies.
 
 ### Config
 
 | Field | Default | Notes |
 | --- | --- | --- |
-| `enabled` | `false` | Must be set true to run |
+| `enabled` | `false` | Must be true to send new TypeSafe requests. Local replay of stored details still runs when false. |
 | `model` | `jev-latest` | TypeSafe model alias |
 | `keepThreshold` | `0.5` | Clamped to `[0,1]` |
 | `preserveRecentMessages` | `6` | Recent window is protected |
@@ -117,7 +118,9 @@ API Key 只走环境变量 `TYPESAFE_API_KEY`。
 
 ### 隐私与数据流
 
-默认关闭时不访问 TypeSafe。启用后只发送脱敏后的工具名、参数摘要、结果长度和短标签，不含完整 toolResult。
+`enabled` 只控制新的 TypeSafe 请求。默认关闭时不访问 TypeSafe，但已有 `pi-jev-compaction` details 只要 marker 匹配且结构安全，仍会本地重放。
+
+启用后，Jev 请求会发送：经过脱敏和截断的短用户/助手文本片段；工具名；脱敏/截断后的参数摘要；结果长度、错误标志和短标签。**不发送完整 toolResult 正文。**
 
 ### 失败回退
 

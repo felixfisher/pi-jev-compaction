@@ -48,7 +48,11 @@ interface AggregateReport {
   error?: string;
   originalUnchanged?: boolean;
   apiKeyPresent?: boolean;
-  usedDefaultExtensionConfig?: boolean;
+  defaultBudgetAttemptEnabledOnly?: boolean;
+  defaultBudgetJudgeCalls?: number;
+  persistenceUsedRaisedMax?: boolean;
+  raisedMaxJudgeCalls?: number;
+  disabledLocalReplayApplied?: boolean;
   explicitEnableOverride?: boolean;
   publicApiOnly?: boolean;
   branchEntries?: number;
@@ -111,7 +115,11 @@ function writeReport(report: AggregateReport): void {
     "## 环境与隔离",
     "",
     `- apiKeyPresent: ${report.apiKeyPresent ?? false}`,
-    `- usedDefaultExtensionConfig: ${report.usedDefaultExtensionConfig ?? false}`,
+    `- defaultBudgetAttemptEnabledOnly: ${report.defaultBudgetAttemptEnabledOnly ?? false}`,
+    `- defaultBudgetJudgeCalls: ${num(report.defaultBudgetJudgeCalls)}`,
+    `- persistenceUsedRaisedMax: ${report.persistenceUsedRaisedMax ?? false}`,
+    `- raisedMaxJudgeCalls: ${num(report.raisedMaxJudgeCalls)}`,
+    `- disabledLocalReplayApplied: ${report.disabledLocalReplayApplied ?? false}`,
     `- explicitEnableOverride: ${report.explicitEnableOverride ?? false}`,
     `- publicApiOnly: ${report.publicApiOnly ?? false}`,
     `- originalUnchanged: ${report.originalUnchanged ?? false}`,
@@ -237,7 +245,7 @@ test("real Jev compaction against copied PI_SESSION_FILE via public APIs", async
     status: "failed",
     phase: "start",
     apiKeyPresent: Boolean(process.env.TYPESAFE_API_KEY && process.env.TYPESAFE_API_KEY.trim() !== ""),
-    usedDefaultExtensionConfig: true,
+    defaultBudgetAttemptEnabledOnly: true,
     explicitEnableOverride: true,
     publicApiOnly: true,
   };
@@ -283,9 +291,16 @@ test("real Jev compaction against copied PI_SESSION_FILE via public APIs", async
     report.orphanResults = pairing.orphanResultIndexes.length;
 
     report.phase = "handleBeforeCompact";
+    let defaultBudgetJudgeCalls = 0;
     const defaultRuntime = createRuntime({
       home: emptyHome,
       configOverride: { enabled: true },
+      judgeFactory: () => ({
+        async judge() {
+          defaultBudgetJudgeCalls += 1;
+          throw new Error("jev_should_not_run_on_default_budget_precheck");
+        },
+      }),
     });
     const defaultAttempt = await defaultRuntime.handleBeforeCompact(
       {
@@ -301,12 +316,14 @@ test("real Jev compaction against copied PI_SESSION_FILE via public APIs", async
       },
       { cwd: emptyHome, isProjectTrusted: () => false, hasUI: false },
     );
+    report.defaultBudgetJudgeCalls = defaultBudgetJudgeCalls;
     if (!defaultAttempt?.compaction) {
       report.defaultBudgetRejected = true;
       report.defaultBudgetReason = sanitize(defaultRuntime.lastRun()?.reason ?? "undefined");
     } else {
       report.defaultBudgetRejected = false;
     }
+    report.persistenceUsedRaisedMax = !defaultAttempt?.compaction;
 
     const runtime = createRuntime({
       home: emptyHome,
@@ -394,6 +411,22 @@ test("real Jev compaction against copied PI_SESSION_FILE via public APIs", async
     );
     report.reopenReplayApplied = Boolean(reopenedReplay?.messages);
 
+    const disabledRuntime = createRuntime({
+      home: emptyHome,
+      configOverride: { enabled: false },
+    });
+    const disabledReplay = disabledRuntime.handleContext(
+      { messages: reopenedContext.messages as AgentMessage[] },
+      {
+        cwd: emptyHome,
+        isProjectTrusted: () => false,
+        sessionManager: { getBranch: () => reopened.getBranch() as SessionEntryLike[] },
+      },
+    );
+    report.disabledLocalReplayApplied = Boolean(disabledReplay?.messages);
+
+    report.raisedMaxJudgeCalls = details.stats.requests;
+
     assert.equal(details.kind, JEV_COMPACTION_KIND);
     assert.ok(Array.isArray(details.replayMessages));
     assert.ok(details.replayMessages.length > 0);
@@ -402,6 +435,8 @@ test("real Jev compaction against copied PI_SESSION_FILE via public APIs", async
     assert.equal(report.contextReplayApplied, true);
     assert.equal(report.reopenRestoredKind, true);
     assert.equal(report.reopenReplayApplied, true);
+    assert.equal(report.disabledLocalReplayApplied, true);
+    assert.equal(report.defaultBudgetJudgeCalls, 0);
     assert.equal(report.contextSummaryRemaining, 0);
 
     report.status = "passed";

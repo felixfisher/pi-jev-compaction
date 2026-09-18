@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compactWindow, createMapJudge, decideAction, truncateResultContent } from "../src/2026-09-18_compact.ts";
+import { compactWindow, createMapJudge, decideAction, estimateMinimumReplayTokens, truncateResultContent } from "../src/2026-09-18_compact.ts";
 import { compactionMarker } from "../src/2026-09-18_pi-adapter.ts";
 import { JEV_COMPACTION_KIND, JEV_COMPACTION_SCHEMA_VERSION, type AgentMessage } from "../src/2026-09-18_types.ts";
 import { assistant, call, config, conversation, result, summary, user } from "./2026-09-18_fixtures.ts";
@@ -295,4 +295,50 @@ test("replay over maxReplayTokens falls back", async () => {
   assert.equal(outcome.ok, false);
   if (outcome.ok) return;
   assert.equal(outcome.reason, "max_replay_tokens");
+});
+
+test("minimum replay over max does not call Jev", async () => {
+  const messages = conversation([["k1", "read", "payload ".repeat(80), { path: "a.ts" }]]);
+  let calls = 0;
+  const outcome = await compactWindow({
+    messages,
+    config: config({ targetReplayTokens: 1, maxReplayTokens: 2, protectTools: [], preserveRecentMessages: 0 }),
+    judge: {
+      async judge(input) {
+        calls += 1;
+        return createMapJudge({ k1: { keepCall: 1, keepResult: 1 } }).judge(input);
+      },
+    },
+  });
+  assert.equal(outcome.ok, false);
+  if (outcome.ok) return;
+  assert.equal(outcome.reason, "max_replay_tokens");
+  assert.equal(calls, 0);
+});
+
+test("final maxReplayTokens check still runs after Jev", async () => {
+  const messages = conversation([["k1", "read", "payload ".repeat(80), { path: "a.ts" }]]);
+  const cfgBase = config({ protectTools: [], preserveRecentMessages: 0, minReductionRatio: 0 });
+  const minimum = estimateMinimumReplayTokens(messages, cfgBase);
+  let calls = 0;
+  const outcome = await compactWindow({
+    messages,
+    config: config({
+      targetReplayTokens: 1,
+      maxReplayTokens: minimum + 8,
+      protectTools: [],
+      preserveRecentMessages: 0,
+      minReductionRatio: 0,
+    }),
+    judge: {
+      async judge(input) {
+        calls += 1;
+        return createMapJudge({ k1: { keepCall: 1, keepResult: 1 } }).judge(input);
+      },
+    },
+  });
+  assert.equal(outcome.ok, false);
+  if (outcome.ok) return;
+  assert.equal(outcome.reason, "max_replay_tokens");
+  assert.ok(calls >= 1);
 });

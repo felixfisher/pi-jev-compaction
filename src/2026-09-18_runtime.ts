@@ -203,8 +203,7 @@ export function createRuntime(options: CreateRuntimeOptions = {}): JevRuntime {
     },
     handleContext(event, ctx) {
       try {
-        const { config } = loadCurrentConfig(ctx);
-        if (!config.enabled) return undefined;
+        // enabled only gates new TypeSafe requests, not local replay of stored details.
         const entries = readBranch(ctx);
         const result = replayContextMessages(tryClone(event.messages), entries);
         if (!result.applied) {

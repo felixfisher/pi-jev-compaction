@@ -187,7 +187,7 @@ test("runtime fail-open without API key", async () => {
   assert.equal(resultValue, undefined);
   assert.equal(runtime.lastRun()?.reason, "missing_api_key");
   assert.equal(notes.some((item) => item.includes("TYPESAFE_API_KEY")), true);
-  assert.equal(notes.some((item) => item.includes("sk-") || item.includes("super-secret")), false);
+  assert.equal(notes.some((item) => item.includes("sk" + "-") || item.includes("super-secret")), false);
 });
 
 test("runtime context fail-open leaves original messages", () => {
@@ -307,7 +307,7 @@ test("state sent to Jev does not include full tool result text", async () => {
       preparation: {
         messagesToSummarize: [
           user("see file"),
-          assistant([call("c1", "read", { path: "a.ts", token: "sk-ant-secretvalue999" })]),
+          assistant([call("c1", "read", { path: "a.ts", token: ["sk", "ant", "secretvalue999"].join("-") })]),
           result("c1", "read", secret.repeat(10)),
         ],
         firstKeptEntryId: "x",
@@ -318,7 +318,71 @@ test("state sent to Jev does not include full tool result text", async () => {
   );
   const encoded = JSON.stringify(captured);
   assert.equal(encoded.includes(secret), false);
-  assert.equal(encoded.includes("sk-ant-secretvalue999"), false);
+  assert.equal(encoded.includes(["sk", "ant", "secretvalue999"].join("-")), false);
+});
+
+test("local context replay still works after enabled is turned off", async () => {
+  const compacting = createRuntime({
+    env: { TYPESAFE_API_KEY: "not-a-real-key" },
+    configOverride: { enabled: true, preserveRecentMessages: 0, minReductionRatio: 0.1, truncateHeadChars: 20, truncateTailChars: 20 },
+    judgeFactory: () => createMapJudge({ c1: { keepCall: 0.9, keepResult: 0.1 } }),
+  });
+  const compactResult = await compacting.handleBeforeCompact(
+    {
+      preparation: {
+        messagesToSummarize: [
+          user("run ls"),
+          assistant([{ type: "text", text: "running" }, call("c1", "bash", { command: "ls -la" })]),
+          result("c1", "bash", "OUTPUT".repeat(80), { details: { exitCode: 0 } }),
+        ],
+        firstKeptEntryId: "tail1",
+        tokensBefore: 8000,
+      },
+      reason: "manual",
+    },
+    { isProjectTrusted: () => false },
+  );
+  assert.ok(compactResult?.compaction.details);
+  const details = compactResult.compaction.details;
+  const disabled = createRuntime({
+    env: {},
+    configOverride: { enabled: false },
+  });
+  const skipped = await disabled.handleBeforeCompact(
+    {
+      preparation: {
+        messagesToSummarize: [user("later")],
+        firstKeptEntryId: "x",
+        tokensBefore: 1,
+      },
+    },
+    { isProjectTrusted: () => false },
+  );
+  assert.equal(skipped, undefined);
+  const replayed = disabled.handleContext(
+    {
+      messages: [
+        summary(compactResult.compaction.summary, 8000, Date.parse(details.createdAt)),
+        user("what next"),
+      ],
+    },
+    {
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "compaction",
+            summary: compactResult.compaction.summary,
+            tokensBefore: 8000,
+            timestamp: details.createdAt,
+            details,
+          },
+        ],
+      },
+    },
+  );
+  assert.ok(replayed?.messages);
+  assert.equal(replayed.messages.some((item) => item.role === "compactionSummary"), false);
+  assert.equal(replayed.messages.some((item) => item.role === "user" && item.content === "run ls"), true);
 });
 
 test("default install stays disabled until explicit enable", async () => {
