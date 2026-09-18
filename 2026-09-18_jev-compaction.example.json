@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "model": "jev-latest",
+  "keepThreshold": 0.5,
+  "preserveRecentMessages": 6,
+  "truncateHeadChars": 300,
+  "truncateTailChars": 500,
+  "minReductionRatio": 0.25,
+  "targetReplayTokens": 80000,
+  "maxReplayTokens": 100000,
+  "timeoutMs": 15000,
+  "maxRetries": 2,
+  "protectTools": ["edit", "write"],
+  "protectErrors": true,
+  "privacyMode": "balanced"
+}
