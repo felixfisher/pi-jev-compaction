@@ -23,6 +23,11 @@ Inspired by [`tamaratran/fast-jev-compaction`](https://github.com/tamaratran/fas
 
 It is **not** a prose summarizer and **not** OpenAI native compaction.
 
+### Requirements
+
+- Pi Coding Agent **0.85.1+**
+- Node.js **>= 22.19.0** (Pi 0.85.1 uses `fs.globSync` and declares `engines.node >=22.19.0`)
+
 ### Install
 
 ```bash
@@ -97,6 +102,11 @@ Remove the package from Pi settings (`pi remove <path>` or delete the `packages`
 ### 定位
 
 用 Jev 判断旧工具调用是否仍有价值，而不是写一段摘要。精简结果仍是标准 `AgentMessage`，可供任意模型继续使用。
+
+### 要求
+
+- Pi Coding Agent **0.85.1+**
+- Node.js **>= 22.19.0**（Pi 0.85.1 使用 `fs.globSync`，官方 engines 为 `>=22.19.0`）
 
 ### 安装
 

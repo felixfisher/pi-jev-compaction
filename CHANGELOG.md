@@ -15,3 +15,4 @@ Initial public snapshot of `pi-jev-compaction`.
 - Compaction details store replay messages in the session JSONL without rewriting original history.
 - `/jev-status` reports enablement, key presence, budget, and last stats. No API key is logged.
 - Mocked default tests; optional `npm run test:real-session` is not part of CI.
+- Requires **Pi 0.85.1+** and **Node.js >= 22.19.0**. CI matrix is 22.19.0 / 24 / 26. Node 20 is not supported because Pi 0.85.1 depends on `fs.globSync`.
